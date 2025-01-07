@@ -1,0 +1,15 @@
+**.png
+**.svg
+**.jpg
+**.csv
+.env
+.env.dev
+*.sw*
+*.onnx
+*.pt*
+__pycache__
+**__pycache__
+**/*__pycache__
+**/*.pt*
+**/*.pt
+**/*.egg-info/*
