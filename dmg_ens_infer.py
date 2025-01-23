@@ -19,6 +19,20 @@ def save(image_id, result, output_dir):
     with open(out, "w") as f:
         json.dump(result, f)
 
+def get_kp_lst(row):
+    kp_dct = eval(row['kp_lst'])
+    if type(kp_dct) == str:
+        kp_dct = eval(kp_dct)
+    kp_lst = []
+    if len(kp_dct) > 0:
+        print(kp_dct)
+        for ele in kp_dct:
+            if type(ele) == list:
+                kp_lst.append(ele)
+            elif type(ele) == dict:
+                kp_lst.append([ele["x"], ele["y"]])
+    return kp_lst
+
 def get_cage(vin, pc):
     wmi = vin[:3]
     model_year = vin[9]
@@ -118,12 +132,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     #output_dir = f"out_gd150k_0002_pali_dmg-qa-50k_damaged_combine_largedata1120"
-    output_dir = f"250107_timed_hour_90thresh"
+    output_dir = f"250120_testrun"
     
-    data = pd.read_parquet('/home/ubuntu/AMZ_Delta_DF_241003_30k.parquet')
+    complete_csv = pd.read_csv('results/final4.csv')
+    completed_sess = complete_csv['session'].tolist()
+    data = pd.read_parquet('/home/ubuntu/roisul/241129.parquet')
+    data = data[~data['SessionKey'].isin(completed_sess)]
+    data = data[data['SessID'].str.startswith('AM')]
+    data['kp_lst'] = data.apply(get_kp_lst, axis=1)
     #df = pd.read_csv('/home/ubuntu/AMZ_DF_V8.csv')
-    no_vin_lst = torch.load('no_vin_AMZ_Delta_DF_241003_30k.pt')
-    data = data[~data['VIN'].isin(no_vin_lst)]
+    #no_vin_lst = torch.load('no_vin_AMZ_Delta_DF_241003_30k.pt')
+    #data = data[~data['VIN'].isin(no_vin_lst)]
     
     df = data
 
@@ -151,27 +170,38 @@ if __name__ == "__main__":
                         #Load data from csv
                         pc = str(pc).zfill(2)
                         cdn = row[f"PhotoCode_{int(pc)}"]  
+                        print('cdn', cdn)
                         if cdn == None:
                             continue
                         
                         image_id = cdn.split('/')[-1].split('.')[0]
-                        try:
-                            photo_lst = json.loads(json.loads(row["photo_lst"]))
-                        except:
-                            photo_lst = []
-                        try:
-                            damage_name_lst = json.loads(json.loads(row["dmg_name_lst"]))
-                        except:
-                            damage_name_lst = []
-                        try:
-                            comp_lst = json.loads(json.loads(row["component_lst"]))
-                        except:
-                            comp_lst = []
-                        try:
-                            kpt_lst = json.loads(json.loads(row["kp_lst"]))
-                        except:
-                            kpt_lst = []
-                            
+                        
+                        photo_lst = json.loads(row["photo_lst"])
+                        if type(photo_lst) == str:
+                            photo_lst = json.loads(row["photo_lst"])
+                        
+                        if row['damage_name_lst'] == None:
+                            damage_name_lst = json.loads(row["dmg_name_lst"])
+                        else:
+                            damage_name_lst = json.loads(row["damage_name_lst"])
+                        
+                        if type(damage_name_lst) == str:
+                            damage_name_lst = json.load(damage_name_lst)
+                        
+                        comp_lst = json.loads(row["component_lst"])
+                        if type(comp_lst) == str:
+                            comp_lst = json.loads(comp_lst)
+
+                        if type(row["kp_lst"]) == str:
+                            kpt_lst = json.loads(row["kp_lst"])
+                            if type(kpt_lst) == str:
+                                kpt_lst = json.loads(kpt_lst)
+                        else:
+                            kpt_lst = row["kp_lst"]
+
+                        severity_lst = json.loads(row['severity_lst'])
+                        if type(severity_lst) == str:
+                            severity_lst = json.loads(severity_lst)
 
                         if len(kpt_lst) > 0:
                             gt_bboxes = construct_gt_bbox(damage_name_lst, kpt_lst, 1080, 1920)   
@@ -185,6 +215,7 @@ if __name__ == "__main__":
                             damage_name_lst = [damage_name_lst[i] for i in idxs]
                             comp_lst = [comp_lst[i] for i in idxs]
                             gt_bboxes = [gt_bboxes[i] for i in idxs]
+                            severity_lst = [severity_lst[i] for i in idxs]
                         vin = row["VIN"]
                         svg_url = get_cage(vin, int(pc))
                         if svg_url == "":
@@ -198,24 +229,30 @@ if __name__ == "__main__":
                         pld_b = pld_a
                         
                         start = time.time()
-                        crop_data, version = get_dmg_bboxes(image_id, pld_a, pld_b, session)
+                        crop_data, version, res_dct_lst = get_dmg_bboxes(image_id, pld_a, pld_b, session)
                         dmg_crop_bboxes, confidence_lst, method_lst = get_crop_bboxes(crop_data)                
-                        print(dmg_crop_bboxes)
-                        print(method_lst)
+                        print('cdn', cdn)
+                        print('GT', gt_bboxes)
+                        print('PRED', dmg_crop_bboxes)
                         end = time.time()
                         time_per_req = (end-start)
                         total += time_per_req 
-                        
                         opt = {}
                         opt['cdn_url'] = cdn
                         opt['fname'] = image_id
+                        opt['vin'] = vin
                         opt['session'] = session
+                        opt['pc'] = pc
                         opt['method_lst'] = method_lst
                         opt['gt_bboxes'] = gt_bboxes
+                        opt['damage_name_lst'] = damage_name_lst
+                        opt['comp_lst'] = comp_lst
+                        opt['severity_lst'] = severity_lst
                         opt['all_pred_bboxes'] = dmg_crop_bboxes
                         opt['pred_confs'] = confidence_lst
                         opt['time'] = time_per_req
                         opt["version"] = version
+                        opt["res_dct_lst"] = res_dct_lst
                         accumulated_dicts.append(opt)
                         
                         #if (idx + 1) % interval == 0:
@@ -233,24 +270,24 @@ if __name__ == "__main__":
                     error_message = f"Error processing item {cdn}: {e}"
                     print(error_message)
                     logging.error(error_message)
-                    error_log.append(str(e))
-                #    import ipdb;ipdb.set_trace()
+                    #error_log.append(str(e))
                     continue
                 
-                if current_time >= duration_seconds:
-                    break
+                #if current_time >= duration_seconds:
+                #    break
+    
     print('Total time', total)
-    files  = glob(f"results/{output_dir}/*.csv")
-    for i, file in enumerate(files):
-        x = pd.read_csv(file)
-        if i == 0:
-            final = x
-        else:
-            final = pd.concat([final,x])
-    final = final.drop_duplicates(subset="cdn_url")
-    final['num_gts'] = final['gt_bboxes'].apply(lambda x: len(x))
-    final['num_preds'] = final['all_pred_bboxes'].apply(lambda x: len(x))
-    #final['qa_dmg_num'] = final['qa_answers'].apply(lambda x: 1 if 'yes' in x else 0)
-    #final['final_dmg_cnt'] = final.apply(lambda x: x['qa_dmg_num']+x['num_preds'], axis=1)
-    final.to_csv(f'results/{output_dir}/final.csv', index=False)
+#    files  = glob(f"results/{output_dir}/*.csv")
+#    for i, file in enumerate(files):
+#        x = pd.read_csv(file)
+#        if i == 0:
+#            final = x
+#        else:
+#            final = pd.concat([final,x])
+#    final = final.drop_duplicates(subset="cdn_url")
+#    final['num_gts'] = final['gt_bboxes'].apply(lambda x: len(x))
+#    final['num_preds'] = final['all_pred_bboxes'].apply(lambda x: len(x))
+#    #final['qa_dmg_num'] = final['qa_answers'].apply(lambda x: 1 if 'yes' in x else 0)
+#    #final['final_dmg_cnt'] = final.apply(lambda x: x['qa_dmg_num']+x['num_preds'], axis=1)
+#    final.to_csv(f'results/{output_dir}/final.csv', index=False)
 

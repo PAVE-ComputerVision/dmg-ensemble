@@ -72,7 +72,9 @@ def fetch_data(payload):
     model_ids = []
     if response_data['damages'] == None:
         bounding_boxes, ori_bounding_boxes, model_ids = [],[],[]
+        res_dct_lst = []
     else:
+        res_dct_lst = []
         for dmg in response_data['damages']:
             conf = dmg['damage-confidence']
             kpt = dmg['keypoint']
@@ -95,6 +97,7 @@ def fetch_data(payload):
             
             ori_bounding_boxes.append(scaled_bb)
             bounding_boxes.append(adjusted_bb)
+            res_dct_lst.append(dmg)
 #    elif method == 'b':
 #    api_url = 'https://damage-classification.ai-dev.paveapi.com/'
 #    response = requests.post(api_url, json=payload)
@@ -117,7 +120,7 @@ def fetch_data(payload):
 #            
 #            ori_bounding_boxes.append(bbox)
 #            bounding_boxes.append(adjusted_bb)
-    return bounding_boxes, ori_bounding_boxes, model_ids, response_data["version"]
+    return bounding_boxes, ori_bounding_boxes, model_ids, response_data["version"], res_dct_lst
 
 def get_dmg_bboxes(image_id, pld_a, pld_b, session):
     """
@@ -136,7 +139,7 @@ def get_dmg_bboxes(image_id, pld_a, pld_b, session):
     #for method in ['a']:#['a', 'b']:
     #    if method == 'a':
     #print('Running dmg det endpoint')   
-    bboxes, ori_bboxes, model_ids, version = fetch_data(pld_a)
+    bboxes, ori_bboxes, model_ids, version, res_dct_lst = fetch_data(pld_a)
     print(bboxes)
     #    elif method == 'b':
     #        print('Running dmg cls endpoint')   
@@ -159,7 +162,7 @@ def get_dmg_bboxes(image_id, pld_a, pld_b, session):
             'confidence': confidence,
         })
     
-    return crop_data, version
+    return crop_data, version, res_dct_lst
 
 def get_dmg_assurance(image_id, payload):
     """
