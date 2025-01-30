@@ -132,12 +132,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     #output_dir = f"out_gd150k_0002_pali_dmg-qa-50k_damaged_combine_largedata1120"
-    output_dir = f"250120_testrun"
+    output_dir = f"250129_testrun"
     
-    complete_csv = pd.read_csv('results/final4.csv')
-    completed_sess = complete_csv['session'].tolist()
+    #complete_csv = pd.read_csv('results/final4.csv')
+    #completed_sess = complete_csv['session'].tolist()
+    
     data = pd.read_parquet('/home/ubuntu/roisul/241129.parquet')
-    data = data[~data['SessionKey'].isin(completed_sess)]
+    data = data.head(10)
+    #data = data[~data['SessionKey'].isin(completed_sess)]
     data = data[data['SessID'].str.startswith('AM')]
     data['kp_lst'] = data.apply(get_kp_lst, axis=1)
     #df = pd.read_csv('/home/ubuntu/AMZ_DF_V8.csv')
@@ -163,115 +165,117 @@ if __name__ == "__main__":
         while current_time < duration_seconds:
             for idx, (_, row) in enumerate(df.iterrows()):
                 print(f"Test time elapsed: {(current_time/60):.2f} minutes. Time remaining: {((duration_seconds - current_time)/60):.2f} minutes")
-                try:
-                    session = row["SessionKey"]
-                    for pc in ['04', '05', '07', '08']:
-                        
-                        #Load data from csv
-                        pc = str(pc).zfill(2)
-                        cdn = row[f"PhotoCode_{int(pc)}"]  
-                        print('cdn', cdn)
-                        if cdn == None:
-                            continue
-                        
-                        image_id = cdn.split('/')[-1].split('.')[0]
-                        
+                #try:
+                session = row["SessionKey"]
+                for pc in ['04', '05', '07', '08']:
+                    
+                    #Load data from csv
+                    pc = str(pc).zfill(2)
+                    cdn = row[f"PhotoCode_{int(pc)}"]  
+                    print('cdn', cdn)
+                    if cdn == None:
+                        continue
+                    
+                    image_id = cdn.split('/')[-1].split('.')[0]
+                    
+                    photo_lst = json.loads(row["photo_lst"])
+                    if type(photo_lst) == str:
                         photo_lst = json.loads(row["photo_lst"])
-                        if type(photo_lst) == str:
-                            photo_lst = json.loads(row["photo_lst"])
-                        
-                        if row['damage_name_lst'] == None:
-                            damage_name_lst = json.loads(row["dmg_name_lst"])
-                        else:
-                            damage_name_lst = json.loads(row["damage_name_lst"])
-                        
-                        if type(damage_name_lst) == str:
-                            damage_name_lst = json.load(damage_name_lst)
-                        
-                        comp_lst = json.loads(row["component_lst"])
-                        if type(comp_lst) == str:
-                            comp_lst = json.loads(comp_lst)
+                    
+                    if row['damage_name_lst'] == None:
+                        damage_name_lst = json.loads(row["dmg_name_lst"])
+                    else:
+                        damage_name_lst = json.loads(row["damage_name_lst"])
+                    
+                    if type(damage_name_lst) == str:
+                        damage_name_lst = json.load(damage_name_lst)
+                    
+                    comp_lst = json.loads(row["component_lst"])
+                    if type(comp_lst) == str:
+                        comp_lst = json.loads(comp_lst)
 
-                        if type(row["kp_lst"]) == str:
-                            kpt_lst = json.loads(row["kp_lst"])
-                            if type(kpt_lst) == str:
-                                kpt_lst = json.loads(kpt_lst)
-                        else:
-                            kpt_lst = row["kp_lst"]
+                    if type(row["kp_lst"]) == str:
+                        kpt_lst = json.loads(row["kp_lst"])
+                        if type(kpt_lst) == str:
+                            kpt_lst = json.loads(kpt_lst)
+                    else:
+                        kpt_lst = row["kp_lst"]
 
-                        severity_lst = json.loads(row['severity_lst'])
-                        if type(severity_lst) == str:
-                            severity_lst = json.loads(severity_lst)
+                    severity_lst = json.loads(row['severity_lst'])
+                    if type(severity_lst) == str:
+                        severity_lst = json.loads(severity_lst)
 
-                        if len(kpt_lst) > 0:
-                            gt_bboxes = construct_gt_bbox(damage_name_lst, kpt_lst, 1080, 1920)   
-                        else:
-                            gt_bboxes = []
+                    if len(kpt_lst) > 0:
+                        gt_bboxes = construct_gt_bbox(damage_name_lst, kpt_lst, 1080, 1920)   
+                    else:
+                        gt_bboxes = []
 
-                        #Process lists
-                        idxs = [i for i in range(len(photo_lst)) if int(photo_lst[i]['code']) == int(pc)]
-                        if len(idxs) > 0:
-                            kpt_lst = [kpt_lst[i] for i in idxs]
-                            damage_name_lst = [damage_name_lst[i] for i in idxs]
-                            comp_lst = [comp_lst[i] for i in idxs]
-                            gt_bboxes = [gt_bboxes[i] for i in idxs]
-                            severity_lst = [severity_lst[i] for i in idxs]
-                        vin = row["VIN"]
-                        svg_url = get_cage(vin, int(pc))
-                        if svg_url == "":
-                            print(f"no image for session {session} and pc {pc}")
-                            #save(session + f"_{pc}", {"pc": pc, "image": None}, output_dir)
-                            print(vin)
-                            no_vin_lst.append(vin)
-                            continue
-                        
-                        pld_a = get_payload_a(vin, cdn, int(pc), svg_url)
-                        pld_b = pld_a
-                        
-                        start = time.time()
-                        crop_data, version, res_dct_lst = get_dmg_bboxes(image_id, pld_a, pld_b, session)
-                        dmg_crop_bboxes, confidence_lst, method_lst = get_crop_bboxes(crop_data)                
-                        print('cdn', cdn)
-                        print('GT', gt_bboxes)
-                        print('PRED', dmg_crop_bboxes)
-                        end = time.time()
-                        time_per_req = (end-start)
-                        total += time_per_req 
-                        opt = {}
-                        opt['cdn_url'] = cdn
-                        opt['fname'] = image_id
-                        opt['vin'] = vin
-                        opt['session'] = session
-                        opt['pc'] = pc
-                        opt['method_lst'] = method_lst
-                        opt['gt_bboxes'] = gt_bboxes
-                        opt['damage_name_lst'] = damage_name_lst
-                        opt['comp_lst'] = comp_lst
-                        opt['severity_lst'] = severity_lst
-                        opt['all_pred_bboxes'] = dmg_crop_bboxes
-                        opt['pred_confs'] = confidence_lst
-                        opt['time'] = time_per_req
-                        opt["version"] = version
-                        opt["res_dct_lst"] = res_dct_lst
-                        accumulated_dicts.append(opt)
-                        
-                        #if (idx + 1) % interval == 0:
-                        result = pd.DataFrame(accumulated_dicts)
-                        if not os.path.exists(f"results/{output_dir}"):
-                            os.makedirs(f"results/{output_dir}")
-                        path = f"results/{output_dir}/result_combine_{args.chunk_id}.csv"
-                        result.to_csv(path, mode='a', header=not pd.io.common.file_exists(path), index=False)
-                        accumulated_dicts.clear()
-                        current_time = time.time() - start_time
-                        if current_time >= duration_seconds:
-                            break
-                        pbar.update(1)
-                except Exception as e:
-                    error_message = f"Error processing item {cdn}: {e}"
-                    print(error_message)
-                    logging.error(error_message)
-                    #error_log.append(str(e))
-                    continue
+                    #Process lists
+                    idxs = [i for i in range(len(photo_lst)) if int(photo_lst[i]['code']) == int(pc)]
+                    if len(idxs) > 0:
+                        kpt_lst = [kpt_lst[i] for i in idxs]
+                        damage_name_lst = [damage_name_lst[i] for i in idxs]
+                        comp_lst = [comp_lst[i] for i in idxs]
+                        gt_bboxes = [gt_bboxes[i] for i in idxs]
+                        severity_lst = [severity_lst[i] for i in idxs]
+                    vin = row["VIN"]
+                    svg_url = get_cage(vin, int(pc))
+                    if svg_url == "":
+                        print(f"no image for session {session} and pc {pc}")
+                        #save(session + f"_{pc}", {"pc": pc, "image": None}, output_dir)
+                        print(vin)
+                        no_vin_lst.append(vin)
+                        continue
+                    
+                    pld_a = get_payload_a(vin, cdn, int(pc), svg_url)
+                    pld_b = pld_a
+                    
+                    start = time.time()
+                    crop_data, version, res_dct_lst, runtimes, car_bbox  = get_dmg_bboxes(image_id, pld_a, pld_b, session)
+                    dmg_crop_bboxes, confidence_lst, method_lst = get_crop_bboxes(crop_data)                
+                    print('cdn', cdn)
+                    print('GT', gt_bboxes)
+                    print('PRED', dmg_crop_bboxes)
+                    end = time.time()
+                    time_per_req = (end-start)
+                    total += time_per_req 
+                    opt = {}
+                    opt = {k:v for k, v in runtimes.items()} #unpack runtimes into separate cols
+                    opt["car_bbox"] = car_bbox
+                    opt['cdn_url'] = cdn
+                    opt['fname'] = image_id
+                    opt['vin'] = vin
+                    opt['session'] = session
+                    opt['pc'] = pc
+                    opt['method_lst'] = method_lst
+                    opt['gt_bboxes'] = gt_bboxes
+                    opt['damage_name_lst'] = damage_name_lst
+                    opt['comp_lst'] = comp_lst
+                    opt['severity_lst'] = severity_lst
+                    opt['all_pred_bboxes'] = dmg_crop_bboxes
+                    opt['pred_confs'] = confidence_lst
+                    opt['time'] = time_per_req
+                    opt["version"] = version
+                    opt["res_dct_lst"] = res_dct_lst
+                    accumulated_dicts.append(opt)
+                    
+                    #if (idx + 1) % interval == 0:
+                    result = pd.DataFrame(accumulated_dicts)
+                    if not os.path.exists(f"results/{output_dir}"):
+                        os.makedirs(f"results/{output_dir}")
+                    path = f"results/{output_dir}/result_combine_{args.chunk_id}.csv"
+                    result.to_csv(path, mode='a', header=not pd.io.common.file_exists(path), index=False)
+                    accumulated_dicts.clear()
+                    current_time = time.time() - start_time
+                    if current_time >= duration_seconds:
+                        break
+                    pbar.update(1)
+                #except Exception as e:
+                #    error_message = f"Error processing item {cdn}: {e}"
+                #    print(error_message)
+                #    logging.error(error_message)
+                #    #error_log.append(str(e))
+                #    continue
                 
                 #if current_time >= duration_seconds:
                 #    break

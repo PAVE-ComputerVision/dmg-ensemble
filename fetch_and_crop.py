@@ -67,6 +67,8 @@ def fetch_data(payload):
     response = requests.post(api_url, json=payload)
     print(time.time() - start)
     response_data = response.json()
+    car_bbox = response_data["car_bbox"]
+    runtimes = response_data["runtimes"]
     bounding_boxes = []
     ori_bounding_boxes = []
     model_ids = []
@@ -120,7 +122,7 @@ def fetch_data(payload):
 #            
 #            ori_bounding_boxes.append(bbox)
 #            bounding_boxes.append(adjusted_bb)
-    return bounding_boxes, ori_bounding_boxes, model_ids, response_data["version"], res_dct_lst
+    return bounding_boxes, ori_bounding_boxes, model_ids, response_data["version"], res_dct_lst, runtimes, car_bbox
 
 def get_dmg_bboxes(image_id, pld_a, pld_b, session):
     """
@@ -139,7 +141,7 @@ def get_dmg_bboxes(image_id, pld_a, pld_b, session):
     #for method in ['a']:#['a', 'b']:
     #    if method == 'a':
     #print('Running dmg det endpoint')   
-    bboxes, ori_bboxes, model_ids, version, res_dct_lst = fetch_data(pld_a)
+    bboxes, ori_bboxes, model_ids, version, res_dct_lst, runtimes, car_bbox = fetch_data(pld_a)
     print(bboxes)
     #    elif method == 'b':
     #        print('Running dmg cls endpoint')   
@@ -162,7 +164,7 @@ def get_dmg_bboxes(image_id, pld_a, pld_b, session):
             'confidence': confidence,
         })
     
-    return crop_data, version, res_dct_lst
+    return crop_data, version, res_dct_lst, runtimes, car_bbox
 
 def get_dmg_assurance(image_id, payload):
     """
