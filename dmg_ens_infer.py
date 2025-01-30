@@ -1,5 +1,7 @@
 import time
 import os
+import random
+import string
 import math
 import json
 import torch
@@ -12,7 +14,7 @@ from tqdm import tqdm
 import sys
 from fetch_and_crop import adjust_bbox_to_min_size, fetch_data, get_dmg_bboxes, get_dmg_assurance  
 
-cage_lookup_df = pd.read_csv("amazon_cages_2_0.csv")
+cage_lookup_df = pd.read_csv("/home/ubuntu/amazon_cages_2_0.csv")
 
 def save(image_id, result, output_dir):
     out = os.path.join(output_dir, f"{image_id}_results.json")
@@ -128,16 +130,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--chunk_id", type=int, default=0)
     parser.add_argument("--chunks", type=int, default=1)
+    parser.add_argument("--output_dir", type=str) 
     parser.add_argument("--time", type=float, default=1.0, help="time in hours")
     args = parser.parse_args()
     
-    #output_dir = f"out_gd150k_0002_pali_dmg-qa-50k_damaged_combine_largedata1120"
-    output_dir = f"250129_testrun"
+    output_dir = args.output_dir
+    os.makedirs(f"results/{output_dir}", exist_ok=True)
     
     #complete_csv = pd.read_csv('results/final4.csv')
     #completed_sess = complete_csv['session'].tolist()
     
-    data = pd.read_parquet('/home/ubuntu/roisul/241129.parquet')
+    data = pd.read_parquet('/home/ubuntu/241129.parquet')
     data = data.head(10)
     #data = data[~data['SessionKey'].isin(completed_sess)]
     data = data[data['SessID'].str.startswith('AM')]
